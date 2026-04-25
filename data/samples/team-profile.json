@@ -1,0 +1,59 @@
+{
+  "id": "team-platform-001",
+  "name": "Platform Enablement Team",
+  "description": "Backend and platform engineers improving delivery reliability, automation, and shared engineering practices.",
+  "members": [
+    {
+      "id": "member-anh",
+      "name": "Anh Nguyen",
+      "role": "Backend Engineer",
+      "level": "mid",
+      "skills": [
+        { "name": "Node.js", "category": "technical", "level": 4 },
+        { "name": "API Design", "category": "technical", "level": 3 },
+        { "name": "Incident Review", "category": "process", "level": 2 }
+      ],
+      "developmentGoals": [
+        { "title": "Improve system design", "priority": "high" },
+        { "title": "Lead technical sharing", "priority": "medium" }
+      ],
+      "painPoints": ["Debugging production incidents is still slow", "Hard to document technical decisions consistently"],
+      "interests": ["observability", "architecture", "automation"]
+    },
+    {
+      "id": "member-binh",
+      "name": "Binh Tran",
+      "role": "Frontend Engineer",
+      "level": "junior",
+      "skills": [
+        { "name": "React", "category": "technical", "level": 3 },
+        { "name": "Testing", "category": "technical", "level": 2 },
+        { "name": "Product Thinking", "category": "business", "level": 2 }
+      ],
+      "developmentGoals": [
+        { "title": "Write better tests", "priority": "high" },
+        { "title": "Understand backend APIs", "priority": "medium" }
+      ],
+      "painPoints": ["Unclear API contracts cause rework", "Testing strategy is inconsistent"],
+      "interests": ["testing", "api contracts", "frontend architecture"]
+    },
+    {
+      "id": "member-chi",
+      "name": "Chi Le",
+      "role": "QA Engineer",
+      "level": "senior",
+      "skills": [
+        { "name": "Test Planning", "category": "technical", "level": 5 },
+        { "name": "Automation", "category": "technical", "level": 4 },
+        { "name": "Risk Analysis", "category": "process", "level": 4 }
+      ],
+      "developmentGoals": [
+        { "title": "Shift-left quality practices", "priority": "high" },
+        { "title": "Mentor developers on testability", "priority": "medium" }
+      ],
+      "painPoints": ["Quality risks are found late", "Acceptance criteria are uneven"],
+      "interests": ["testability", "risk-based testing", "delivery process"]
+    }
+  ],
+  "teamGoals": ["Improve delivery reliability", "Reduce repeated defects", "Make knowledge sharing sustainable"]
+}

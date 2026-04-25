@@ -1,0 +1,29 @@
+[
+  {
+    "memberId": "member-anh",
+    "relevance": 5,
+    "clarity": 4,
+    "practicalValue": 5,
+    "difficultyFit": 4,
+    "continuationInterest": 5,
+    "comment": "Useful and directly related to our current delivery issues."
+  },
+  {
+    "memberId": "member-binh",
+    "relevance": 5,
+    "clarity": 5,
+    "practicalValue": 4,
+    "difficultyFit": 5,
+    "continuationInterest": 4,
+    "comment": "The examples made the topic easy to apply."
+  },
+  {
+    "memberId": "member-chi",
+    "relevance": 4,
+    "clarity": 4,
+    "practicalValue": 5,
+    "difficultyFit": 4,
+    "continuationInterest": 5,
+    "comment": "Good candidate for a follow-up workshop."
+  }
+]

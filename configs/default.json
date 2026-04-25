@@ -1,0 +1,29 @@
+{
+  "runMode": "mock",
+  "outputDir": "data/outputs",
+  "sampleData": {
+    "teamProfile": "data/samples/team-profile.json",
+    "votes": "data/samples/votes.json",
+    "feedback": "data/samples/feedback.json"
+  },
+  "providers": {
+    "profile": "mock",
+    "gapAnalysis": "mock",
+    "topicGeneration": "mock",
+    "topicRanking": "mock",
+    "voting": "mock",
+    "content": "mock",
+    "slide": "mock",
+    "scheduling": "mock",
+    "feedback": "mock",
+    "evaluation": "mock",
+    "memory": "mock"
+  },
+  "reviewCheckpoints": {
+    "topicRanking": false,
+    "topicSelection": false,
+    "contentGeneration": false,
+    "schedulingDraft": false,
+    "evaluationResult": false
+  }
+}

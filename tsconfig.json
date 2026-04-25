@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@tsa/core": ["packages/core/src/index.ts"],
+      "@tsa/schemas": ["packages/schemas/src/index.ts"],
+      "@tsa/shared": ["packages/shared/src/index.ts"],
+      "@tsa/profile-module": ["packages/profile-module/src/index.ts"],
+      "@tsa/gap-analysis-module": ["packages/gap-analysis-module/src/index.ts"],
+      "@tsa/topic-generation-module": ["packages/topic-generation-module/src/index.ts"],
+      "@tsa/topic-ranking-module": ["packages/topic-ranking-module/src/index.ts"],
+      "@tsa/voting-module": ["packages/voting-module/src/index.ts"],
+      "@tsa/content-module": ["packages/content-module/src/index.ts"],
+      "@tsa/slide-module": ["packages/slide-module/src/index.ts"],
+      "@tsa/scheduling-module": ["packages/scheduling-module/src/index.ts"],
+      "@tsa/feedback-module": ["packages/feedback-module/src/index.ts"],
+      "@tsa/evaluation-module": ["packages/evaluation-module/src/index.ts"],
+      "@tsa/memory-module": ["packages/memory-module/src/index.ts"]
+    }
+  },
+  "include": [
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "memberId": "member-anh",
+    "topicId": "topic-observability-basics",
+    "score": 3,
+    "reason": "This helps with current production debugging pain."
+  },
+  {
+    "memberId": "member-binh",
+    "topicId": "topic-api-contracts",
+    "score": 3,
+    "reason": "API clarity would reduce frontend rework."
+  },
+  {
+    "memberId": "member-chi",
+    "topicId": "topic-risk-based-testing",
+    "score": 2,
+    "reason": "This can improve planning quality."
+  },
+  {
+    "memberId": "member-chi",
+    "topicId": "topic-api-contracts",
+    "score": 3,
+    "reason": "Clear contracts improve testability."
+  }
+]

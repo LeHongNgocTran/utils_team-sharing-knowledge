@@ -1,0 +1,6 @@
+node_modules/
+data/outputs/*
+!data/outputs/.gitkeep
+.DS_Store
+coverage/
+dist/
