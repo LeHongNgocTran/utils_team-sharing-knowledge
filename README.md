@@ -88,3 +88,9 @@ To add a real provider:
 ## Module Rule
 
 The orchestrator only coordinates. Module-specific logic belongs inside module providers. No module should pass arbitrary objects to the next step; all public input and output must follow shared schemas.
+
+## Handoff Docs
+
+- Contract overview: `docs/contracts/module-contracts.md`
+- Example payloads: `docs/contracts/module-examples.md`
+- Integration checklist: `docs/module-integration-guide.md`

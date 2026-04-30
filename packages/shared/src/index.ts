@@ -26,6 +26,10 @@ export async function readJsonFile<T>(path: string): Promise<T> {
   return JSON.parse(raw) as T;
 }
 
+export async function readTextFile(path: string): Promise<string> {
+  return readFile(resolve(process.cwd(), path), "utf8");
+}
+
 export async function writeJsonFile(path: string, data: unknown): Promise<void> {
   const absolutePath = resolve(process.cwd(), path);
   await mkdir(dirname(absolutePath), { recursive: true });
