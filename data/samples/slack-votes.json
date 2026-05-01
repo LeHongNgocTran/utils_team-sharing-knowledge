@@ -1,0 +1,20 @@
+[
+  {
+    "userId": "member-anh",
+    "topicId": "topic-api-contracts",
+    "score": 3,
+    "reason": "Strong fit for the current roadmap."
+  },
+  {
+    "userId": "member-binh",
+    "topicId": "topic-risk-based-testing",
+    "score": 2,
+    "reason": "Would help daily frontend work."
+  },
+  {
+    "userId": "member-chi",
+    "topicId": "topic-api-contracts",
+    "score": 3,
+    "reason": "Cross-team quality would benefit."
+  }
+]

@@ -21,3 +21,6 @@ Expected outputs:
 - `run-summary.json`
 
 The mock workflow is deterministic except for run id and scheduled date. It is intended for integration testing and handoff, not production decision-making.
+
+Related workflow note:
+- `docs/workflows/voting-flow.md`

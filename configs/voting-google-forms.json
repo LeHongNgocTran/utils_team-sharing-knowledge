@@ -1,0 +1,33 @@
+{
+  "runMode": "real",
+  "outputDir": "data/outputs",
+  "sampleData": {
+    "teamProfile": "data/samples/team-profile.json",
+    "votes": "data/samples/votes.json",
+    "feedback": "data/samples/feedback.json"
+  },
+  "providers": {
+    "profile": "mock",
+    "gapAnalysis": "mock",
+    "topicGeneration": "mock",
+    "topicRanking": "mock",
+    "voting": "real",
+    "content": "mock",
+    "slide": "mock",
+    "scheduling": "mock",
+    "feedback": "mock",
+    "evaluation": "mock",
+    "memory": "mock"
+  },
+  "voting": {
+    "sourceType": "google-forms-csv",
+    "filePath": "data/samples/google-forms-votes.csv"
+  },
+  "reviewCheckpoints": {
+    "topicRanking": false,
+    "topicSelection": false,
+    "contentGeneration": false,
+    "schedulingDraft": false,
+    "evaluationResult": false
+  }
+}
