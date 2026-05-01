@@ -1,5 +1,7 @@
 import {
   type ModuleExecutionContext,
+  type NotificationDraft,
+  notificationDraftSchema,
   type SessionBrief,
   sessionBriefSchema,
   type SessionDraft,
@@ -7,10 +9,23 @@ import {
   type SlideOutline,
   slideOutlineSchema
 } from "@tsa/schemas";
+import { z } from "zod";
 
 export interface SchedulingProvider {
   createSessionDraft(input: { brief: SessionBrief; slideOutline: SlideOutline }, context: ModuleExecutionContext): Promise<SessionDraft>;
 }
+
+const schedulingConfigSchema = z.object({
+  scheduling: z.object({
+    leadDays: z.number().int().nonnegative().default(7),
+    startHourUtc: z.number().int().min(0).max(23).default(7),
+    durationMinutes: z.number().int().positive().default(60),
+    location: z.string().min(1).default("TBD meeting room or video call"),
+    slackChannel: z.string().min(1).default("#team-sharing"),
+    emailRecipients: z.array(z.string().min(1)).default([]),
+    calendarRecipients: z.array(z.string().min(1)).default([])
+  }).default({})
+});
 
 export class MockSchedulingProvider implements SchedulingProvider {
   async createSessionDraft(input: { brief: SessionBrief; slideOutline: SlideOutline }, _context: ModuleExecutionContext): Promise<SessionDraft> {
@@ -46,7 +61,67 @@ export class MockSchedulingProvider implements SchedulingProvider {
 }
 
 export class RealSchedulingProvider implements SchedulingProvider {
-  async createSessionDraft(_input: { brief: SessionBrief; slideOutline: SlideOutline }, _context: ModuleExecutionContext): Promise<SessionDraft> {
-    throw new Error("RealSchedulingProvider is not implemented. Replace it with Calendar, Slack, email, or booking integrations.");
+  async createSessionDraft(input: { brief: SessionBrief; slideOutline: SlideOutline }, context: ModuleExecutionContext): Promise<SessionDraft> {
+    const brief = sessionBriefSchema.parse(input.brief);
+    const slideOutline = slideOutlineSchema.parse(input.slideOutline);
+    const parsedConfig = schedulingConfigSchema.parse(context.config);
+    const schedulingConfig = parsedConfig.scheduling;
+    const scheduledFor = buildScheduledFor(schedulingConfig.leadDays, schedulingConfig.startHourUtc);
+    const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
+    const notifications = buildNotifications(brief, scheduledFor, schedulingConfig);
+
+    return sessionDraftSchema.parse({
+      sessionId,
+      topicId: brief.topicId,
+      title: brief.title,
+      scheduledFor,
+      durationMinutes: schedulingConfig.durationMinutes,
+      location: schedulingConfig.location,
+      brief,
+      slideOutline,
+      notifications
+    });
   }
+}
+
+function buildScheduledFor(leadDays: number, startHourUtc: number): string {
+  const base = new Date();
+  base.setUTCDate(base.getUTCDate() + leadDays);
+  base.setUTCHours(startHourUtc, 0, 0, 0);
+  return base.toISOString();
+}
+
+function buildNotifications(
+  brief: SessionBrief,
+  scheduledFor: string,
+  schedulingConfig: z.infer<typeof schedulingConfigSchema>["scheduling"]
+) {
+  const defaultCalendarRecipients = schedulingConfig.calendarRecipients.length > 0
+    ? schedulingConfig.calendarRecipients
+    : brief.audience;
+  const notifications: NotificationDraft[] = [
+    {
+      channel: "slack",
+      subject: `Upcoming sharing: ${brief.title}`,
+      body: `Draft Slack notify: "${brief.title}" is planned for ${scheduledFor}. Review the brief, agenda, and examples before the session.`,
+      recipients: [schedulingConfig.slackChannel]
+    },
+    {
+      channel: "calendar",
+      subject: `Team Sharing: ${brief.title}`,
+      body: `Draft calendar event for "${brief.title}" scheduled at ${scheduledFor}.`,
+      recipients: defaultCalendarRecipients
+    }
+  ];
+
+  if (schedulingConfig.emailRecipients.length > 0) {
+    notifications.push({
+      channel: "email",
+      subject: `Sharing session draft: ${brief.title}`,
+      body: `Draft email: please review the planned sharing session for "${brief.title}" scheduled at ${scheduledFor}.`,
+      recipients: schedulingConfig.emailRecipients
+    });
+  }
+
+  return notifications.map((notification) => notificationDraftSchema.parse(notification));
 }

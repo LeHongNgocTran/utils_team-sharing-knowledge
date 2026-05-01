@@ -35,7 +35,7 @@ const orchestratorConfigSchema = z.object({
   sampleData: z.record(z.string()).default({}),
   providers: z.record(providerKindSchema),
   reviewCheckpoints: z.record(z.boolean()).default({})
-});
+}).passthrough();
 
 type OrchestratorConfig = z.infer<typeof orchestratorConfigSchema>;
 
