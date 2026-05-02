@@ -23,7 +23,18 @@ export async function ensureDir(path: string): Promise<void> {
 
 export async function readJsonFile<T>(path: string): Promise<T> {
   const raw = await readFile(resolve(process.cwd(), path), "utf8");
-  return JSON.parse(raw) as T;
+  const trimmed = raw.trim();
+
+  if (trimmed.length === 0) {
+    throw new Error(`JSON file "${path}" is empty.`);
+  }
+
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON in "${path}": ${message}`);
+  }
 }
 
 export async function readTextFile(path: string): Promise<string> {

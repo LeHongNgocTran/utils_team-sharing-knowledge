@@ -23,7 +23,13 @@ import { MockTopicRankingProvider, RealTopicRankingProvider, type TopicRankingPr
 import { MockVotingProvider, RealVotingProvider, type VotingProvider } from "@tsa/voting-module";
 import { MockContentProvider, RealContentProvider, type ContentProvider } from "@tsa/content-module";
 import { MockSlideProvider, RealSlideProvider, type SlideProvider } from "@tsa/slide-module";
-import { MockSchedulingProvider, RealSchedulingProvider, type SchedulingProvider } from "@tsa/scheduling-module";
+import {
+  GoogleOAuthPersonalSchedulingProvider,
+  GoogleWorkspaceSchedulingProvider,
+  MockSchedulingProvider,
+  RealSchedulingProvider,
+  type SchedulingProvider
+} from "@tsa/scheduling-module";
 import { MockFeedbackProvider, RealFeedbackProvider, type FeedbackProvider } from "@tsa/feedback-module";
 import { MockEvaluationProvider, RealEvaluationProvider, type EvaluationProvider } from "@tsa/evaluation-module";
 import { MockMemoryProvider, RealMemoryProvider, type MemoryProvider } from "@tsa/memory-module";
@@ -81,7 +87,12 @@ export function createProviderRegistry(): ProviderRegistry<WorkflowProviders> {
     voting: { mock: new MockVotingProvider(), real: new RealVotingProvider() },
     content: { mock: new MockContentProvider(), real: new RealContentProvider() },
     slide: { mock: new MockSlideProvider(), real: new RealSlideProvider() },
-    scheduling: { mock: new MockSchedulingProvider(), real: new RealSchedulingProvider() },
+    scheduling: {
+      mock: new MockSchedulingProvider(),
+      real: new RealSchedulingProvider(),
+      "google-workspace": new GoogleWorkspaceSchedulingProvider(),
+      "google-oauth-personal": new GoogleOAuthPersonalSchedulingProvider()
+    },
     feedback: { mock: new MockFeedbackProvider(), real: new RealFeedbackProvider() },
     evaluation: { mock: new MockEvaluationProvider(), real: new RealEvaluationProvider() },
     memory: { mock: new MockMemoryProvider(), real: new RealMemoryProvider() }

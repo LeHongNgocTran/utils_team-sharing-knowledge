@@ -16,6 +16,7 @@ describe("schema contracts", () => {
         {
           id: "member-1",
           name: "Member One",
+          email: "member.one@example.com",
           role: "Engineer",
           level: "mid",
           skills: [{ name: "Testing", category: "technical", level: 3 }],

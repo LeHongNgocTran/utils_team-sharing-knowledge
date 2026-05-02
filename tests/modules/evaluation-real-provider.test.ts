@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { MockGapAnalysisProvider } from "@tsa/gap-analysis-module";
 import { MockProfileProvider } from "@tsa/profile-module";
-import { MockSlideProvider } from "@tsa/slide-module";
 import { MockTopicGenerationProvider } from "@tsa/topic-generation-module";
 import { MockTopicRankingProvider } from "@tsa/topic-ranking-module";
+import { RealEvaluationProvider } from "@tsa/evaluation-module";
+import { RealFeedbackProvider } from "@tsa/feedback-module";
+import { RealVotingProvider } from "@tsa/voting-module";
+import { MockSlideProvider } from "@tsa/slide-module";
 import { RealContentProvider } from "@tsa/content-module";
 import { RealSchedulingProvider } from "@tsa/scheduling-module";
-import { RealVotingProvider } from "@tsa/voting-module";
-import { sessionDraftSchema } from "@tsa/schemas";
+import { evaluationResultSchema } from "@tsa/schemas";
 import { createTestContext } from "../test-context.js";
 
-describe("real scheduling provider", () => {
-  it("creates a schema-valid session draft with notification drafts", async () => {
+describe("real evaluation provider", () => {
+  it("produces a rule-based evaluation from selection and feedback", async () => {
     const context = createTestContext({
       config: {
         sampleData: {
@@ -31,11 +33,8 @@ describe("real scheduling provider", () => {
           callToAction: "Choose one practice to try in the next sprint."
         },
         scheduling: {
-          fixedStartAt: "2026-05-15T08:00:00.000Z",
           durationMinutes: 75,
-          location: "Training Room 2 - Floor 5",
-          slackChannel: "#platform-team",
-          calendarRecipients: ["engineering@example.com"]
+          slackChannel: "#platform-team"
         }
       }
     });
@@ -48,11 +47,11 @@ describe("real scheduling provider", () => {
     const brief = await new RealContentProvider().createBrief(selection, context);
     const slideOutline = await new MockSlideProvider().createOutline(brief, context);
     const sessionDraft = await new RealSchedulingProvider().createSessionDraft({ brief, slideOutline }, context);
+    const feedbackSummary = await new RealFeedbackProvider().collectFeedback(sessionDraft, context);
+    const evaluation = await new RealEvaluationProvider().evaluate({ selection, feedback: feedbackSummary }, context);
 
-    expect(sessionDraftSchema.safeParse(sessionDraft).success).toBe(true);
-    expect(sessionDraft.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
-    expect(sessionDraft.durationMinutes).toBe(75);
-    expect(sessionDraft.location).toBe("Training Room 2 - Floor 5");
-    expect(sessionDraft.notifications.map((item) => item.channel)).toEqual(["email", "slack", "calendar", "email"]);
+    expect(evaluationResultSchema.safeParse(evaluation).success).toBe(true);
+    expect(evaluation.outcome).toBe("continue-series");
+    expect(evaluation.nextTopicSuggestions.length).toBeGreaterThan(0);
   });
 });

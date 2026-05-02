@@ -43,8 +43,46 @@ describe("mock workflow", () => {
     expect(workflowRun.status).toBe("success");
     expect(state.topicSelection?.selectionReason).toContain("Google Forms");
     expect(state.sessionBrief?.agenda.items.reduce((sum, item) => sum + item.durationMinutes, 0)).toBe(55);
+    expect(state.sessionDraft?.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
     expect(state.sessionDraft?.durationMinutes).toBe(75);
-    expect(state.sessionDraft?.location).toBe("Meeting Room A / Google Meet draft");
-    expect(state.sessionDraft?.notifications.map((item) => item.channel)).toEqual(["slack", "calendar", "email"]);
+    expect(state.sessionDraft?.location).toBe("Training Room 2 - Floor 5");
+    expect(state.sessionDraft?.notifications.map((item) => item.channel)).toEqual(["email", "slack", "calendar", "email"]);
+  });
+
+  it("runs post-voting operations through scheduling, feedback, and evaluation", async () => {
+    await rm("data/outputs", { recursive: true, force: true });
+
+    const { workflowRun, state } = await runMockWorkflow("configs/post-voting-operations-evaluation.json");
+
+    expect(workflowRun.status).toBe("success");
+    expect(state.sessionDraft?.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
+    expect(state.sessionDraft?.location).toBe("Training Room 2 - Floor 5");
+    expect(state.sessionDraft?.notifications.map((item) => item.channel)).toEqual(["email", "slack", "calendar", "email"]);
+    expect(state.feedbackSummary?.summary).toContain("Feedback summary");
+    expect(state.evaluationResult?.outcome).toBe("continue-series");
+  });
+
+  it("runs the google workspace scheduling provider in dry-run mode", async () => {
+    await rm("data/outputs", { recursive: true, force: true });
+
+    const { workflowRun, state } = await runMockWorkflow("configs/google-workspace-post-voting-dry-run.json");
+
+    expect(workflowRun.status).toBe("success");
+    expect(state.sessionDraft?.externalBooking?.provider).toBe("google-workspace");
+    expect(state.sessionDraft?.externalBooking?.status).toBe("draft");
+    expect(state.sessionDraft?.externalBooking?.attendeeEmails).toHaveLength(2);
+    expect(state.sessionDraft?.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
+  });
+
+  it("runs the google personal oauth scheduling provider in dry-run mode", async () => {
+    await rm("data/outputs", { recursive: true, force: true });
+
+    const { workflowRun, state } = await runMockWorkflow("configs/google-oauth-personal-post-voting-dry-run.json");
+
+    expect(workflowRun.status).toBe("success");
+    expect(state.sessionDraft?.externalBooking?.provider).toBe("google-oauth-personal");
+    expect(state.sessionDraft?.externalBooking?.status).toBe("draft");
+    expect(state.sessionDraft?.externalBooking?.attendeeEmails).toHaveLength(2);
+    expect(state.sessionDraft?.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
   });
 });

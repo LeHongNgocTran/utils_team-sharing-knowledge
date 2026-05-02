@@ -1,0 +1,18 @@
+{
+  "rooms": [
+    {
+      "id": "room-sunflower",
+      "name": "Sunflower Room",
+      "capacity": 4,
+      "features": ["projector", "google-meet"],
+      "availableStarts": ["2026-05-12T08:00:00.000Z", "2026-05-13T07:00:00.000Z"]
+    },
+    {
+      "id": "room-orchid",
+      "name": "Orchid Room",
+      "capacity": 8,
+      "features": ["display", "conference-phone", "whiteboard"],
+      "availableStarts": ["2026-05-12T08:00:00.000Z", "2026-05-12T10:00:00.000Z"]
+    }
+  ]
+}

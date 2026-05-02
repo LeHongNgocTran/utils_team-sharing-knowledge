@@ -1,0 +1,19 @@
+{
+  "slots": [
+    {
+      "start": "2026-05-12T08:00:00.000Z",
+      "end": "2026-05-12T09:30:00.000Z",
+      "availableMemberIds": ["member-anh", "member-binh", "member-chi"]
+    },
+    {
+      "start": "2026-05-12T10:00:00.000Z",
+      "end": "2026-05-12T11:30:00.000Z",
+      "availableMemberIds": ["member-anh", "member-chi"]
+    },
+    {
+      "start": "2026-05-13T07:00:00.000Z",
+      "end": "2026-05-13T08:30:00.000Z",
+      "availableMemberIds": ["member-anh", "member-binh", "member-chi"]
+    }
+  ]
+}

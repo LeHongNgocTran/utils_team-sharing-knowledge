@@ -3,7 +3,7 @@ import { z } from "zod";
 export const skillCategorySchema = z.enum(["technical", "soft", "business", "process", "domain"]);
 export const prioritySchema = z.enum(["low", "medium", "high"]);
 export const difficultySchema = z.enum(["beginner", "intermediate", "advanced"]);
-export const providerKindSchema = z.enum(["mock", "rule-based", "ai-api", "cli", "agent", "real"]);
+export const providerKindSchema = z.enum(["mock", "rule-based", "ai-api", "cli", "agent", "real", "google-workspace", "google-oauth-personal"]);
 
 export const skillTagSchema = z.object({
   name: z.string().min(1),
@@ -19,6 +19,7 @@ export const developmentGoalSchema = z.object({
 export const memberProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  email: z.string().email().optional(),
   role: z.string().min(1),
   level: z.enum(["intern", "junior", "mid", "senior", "lead"]),
   skills: z.array(skillTagSchema),
@@ -145,6 +146,20 @@ export const notificationDraftSchema = z.object({
   recipients: z.array(z.string().min(1))
 });
 
+export const externalBookingSchema = z.object({
+  provider: z.enum(["google-workspace", "google-oauth-personal"]),
+  status: z.enum(["draft", "booked", "pending"]),
+  organizerEmail: z.string().email(),
+  attendeeEmails: z.array(z.string().email()).default([]),
+  roomResourceEmail: z.string().email().optional(),
+  calendarEventId: z.string().min(1).optional(),
+  calendarHtmlLink: z.string().url().optional(),
+  meetLink: z.string().url().optional(),
+  candidateSlotStart: z.string().datetime().optional(),
+  candidateSlotEnd: z.string().datetime().optional(),
+  notes: z.array(z.string().min(1)).default([])
+});
+
 export const sessionDraftSchema = z.object({
   sessionId: z.string().min(1),
   topicId: z.string().min(1),
@@ -154,7 +169,8 @@ export const sessionDraftSchema = z.object({
   location: z.string().min(1),
   brief: sessionBriefSchema,
   slideOutline: slideOutlineSchema,
-  notifications: z.array(notificationDraftSchema)
+  notifications: z.array(notificationDraftSchema),
+  externalBooking: externalBookingSchema.optional()
 });
 
 export const feedbackEntrySchema = z.object({
@@ -257,6 +273,7 @@ export type SessionAgenda = z.infer<typeof sessionAgendaSchema>;
 export type SessionBrief = z.infer<typeof sessionBriefSchema>;
 export type SlideOutline = z.infer<typeof slideOutlineSchema>;
 export type NotificationDraft = z.infer<typeof notificationDraftSchema>;
+export type ExternalBooking = z.infer<typeof externalBookingSchema>;
 export type SessionDraft = z.infer<typeof sessionDraftSchema>;
 export type FeedbackEntry = z.infer<typeof feedbackEntrySchema>;
 export type FeedbackSummary = z.infer<typeof feedbackSummarySchema>;

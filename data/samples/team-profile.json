@@ -6,6 +6,7 @@
     {
       "id": "member-anh",
       "name": "Anh Nguyen",
+      "email": "aaaaaaaaaaaaaaaaaaa@gmail.com",
       "role": "Backend Engineer",
       "level": "mid",
       "skills": [
@@ -23,6 +24,7 @@
     {
       "id": "member-binh",
       "name": "Binh Tran",
+      "email": "bbbbbbbbbbbbbbbbbbbbbbb@gmail.com",
       "role": "Frontend Engineer",
       "level": "junior",
       "skills": [
@@ -36,23 +38,6 @@
       ],
       "painPoints": ["Unclear API contracts cause rework", "Testing strategy is inconsistent"],
       "interests": ["testing", "api contracts", "frontend architecture"]
-    },
-    {
-      "id": "member-chi",
-      "name": "Chi Le",
-      "role": "QA Engineer",
-      "level": "senior",
-      "skills": [
-        { "name": "Test Planning", "category": "technical", "level": 5 },
-        { "name": "Automation", "category": "technical", "level": 4 },
-        { "name": "Risk Analysis", "category": "process", "level": 4 }
-      ],
-      "developmentGoals": [
-        { "title": "Shift-left quality practices", "priority": "high" },
-        { "title": "Mentor developers on testability", "priority": "medium" }
-      ],
-      "painPoints": ["Quality risks are found late", "Acceptance criteria are uneven"],
-      "interests": ["testability", "risk-based testing", "delivery process"]
     }
   ],
   "teamGoals": ["Improve delivery reliability", "Reduce repeated defects", "Make knowledge sharing sustainable"]

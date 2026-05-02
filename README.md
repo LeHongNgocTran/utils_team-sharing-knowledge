@@ -94,3 +94,5 @@ The orchestrator only coordinates. Module-specific logic belongs inside module p
 - Contract overview: `docs/contracts/module-contracts.md`
 - Example payloads: `docs/contracts/module-examples.md`
 - Integration checklist: `docs/module-integration-guide.md`
+- Google Workspace setup: `docs/google-workspace-setup.md`
+- Google personal OAuth setup: `docs/google-oauth-personal-setup.md`

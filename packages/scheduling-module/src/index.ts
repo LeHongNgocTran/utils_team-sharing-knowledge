@@ -1,5 +1,7 @@
 import {
+  type ExternalBooking,
   type ModuleExecutionContext,
+  type MemberProfile,
   type NotificationDraft,
   notificationDraftSchema,
   type SessionBrief,
@@ -7,8 +9,11 @@ import {
   type SessionDraft,
   sessionDraftSchema,
   type SlideOutline,
-  slideOutlineSchema
+  slideOutlineSchema,
+  teamProfileSchema
 } from "@tsa/schemas";
+import { readJsonFile, writeJsonFile } from "@tsa/shared";
+import { createSign, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 export interface SchedulingProvider {
@@ -16,15 +21,57 @@ export interface SchedulingProvider {
 }
 
 const schedulingConfigSchema = z.object({
+  sampleData: z.object({
+    teamProfile: z.string().min(1).default("data/samples/team-profile.json"),
+    teamAvailability: z.string().min(1).default("data/samples/team-availability.json"),
+    roomInventory: z.string().min(1).default("data/samples/room-inventory.json")
+  }).default({}),
   scheduling: z.object({
+    fixedStartAt: z.string().datetime().optional(),
     leadDays: z.number().int().nonnegative().default(7),
     startHourUtc: z.number().int().min(0).max(23).default(7),
     durationMinutes: z.number().int().positive().default(60),
     location: z.string().min(1).default("TBD meeting room or video call"),
     slackChannel: z.string().min(1).default("#team-sharing"),
+    availabilityFile: z.string().min(1).optional(),
+    roomsFile: z.string().min(1).optional(),
     emailRecipients: z.array(z.string().min(1)).default([]),
     calendarRecipients: z.array(z.string().min(1)).default([])
   }).default({})
+}).passthrough();
+
+const googleWorkspaceConfigSchema = z.object({
+  googleWorkspace: z.object({
+    organizerEmail: z.string().email(),
+    delegatedUser: z.string().email(),
+    serviceAccountEmail: z.string().email(),
+    privateKeyEnv: z.string().min(1).default("GOOGLE_PRIVATE_KEY"),
+    calendarId: z.string().min(1).default("primary"),
+    timeZone: z.string().min(1).default("UTC"),
+    createMeetLink: z.boolean().default(true),
+    sendCalendarUpdates: z.enum(["all", "externalOnly", "none"]).default("all"),
+    sendTopicAnnouncementEmail: z.boolean().default(true),
+    sendConfirmationEmail: z.boolean().default(true),
+    dryRun: z.boolean().default(true),
+    roomResourceCalendar: z.string().email().optional(),
+    gmailUserId: z.string().min(1).default("me")
+  })
+});
+
+const googlePersonalConfigSchema = z.object({
+  googlePersonal: z.object({
+    credentialsFile: z.string().min(1),
+    tokenFile: z.string().min(1),
+    organizerEmail: z.string().email(),
+    calendarId: z.string().min(1).default("primary"),
+    createMeetLink: z.boolean().default(true),
+    sendCalendarUpdates: z.enum(["all", "externalOnly", "none"]).default("all"),
+    sendTopicAnnouncementEmail: z.boolean().default(true),
+    sendConfirmationEmail: z.boolean().default(true),
+    dryRun: z.boolean().default(true),
+    roomResourceEmail: z.string().email().optional(),
+    gmailUserId: z.string().min(1).default("me")
+  })
 });
 
 export class MockSchedulingProvider implements SchedulingProvider {
@@ -66,9 +113,12 @@ export class RealSchedulingProvider implements SchedulingProvider {
     const slideOutline = slideOutlineSchema.parse(input.slideOutline);
     const parsedConfig = schedulingConfigSchema.parse(context.config);
     const schedulingConfig = parsedConfig.scheduling;
-    const scheduledFor = buildScheduledFor(schedulingConfig.leadDays, schedulingConfig.startHourUtc);
+    const teamProfile = teamProfileSchema.parse(await readJsonFile(parsedConfig.sampleData.teamProfile));
+    const teamMembers = teamProfile.members;
+    const scheduledFor = resolveFixedScheduledFor(schedulingConfig);
     const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
-    const notifications = buildNotifications(brief, scheduledFor, schedulingConfig);
+    const location = schedulingConfig.location;
+    const notifications = buildNotifications(brief, scheduledFor, location, teamMembers, schedulingConfig);
 
     return sessionDraftSchema.parse({
       sessionId,
@@ -76,10 +126,217 @@ export class RealSchedulingProvider implements SchedulingProvider {
       title: brief.title,
       scheduledFor,
       durationMinutes: schedulingConfig.durationMinutes,
-      location: schedulingConfig.location,
+      location,
       brief,
       slideOutline,
       notifications
+    });
+  }
+}
+
+export class GoogleWorkspaceSchedulingProvider implements SchedulingProvider {
+  async createSessionDraft(input: { brief: SessionBrief; slideOutline: SlideOutline }, context: ModuleExecutionContext): Promise<SessionDraft> {
+    const brief = sessionBriefSchema.parse(input.brief);
+    const slideOutline = slideOutlineSchema.parse(input.slideOutline);
+    const parsedConfig = schedulingConfigSchema.merge(googleWorkspaceConfigSchema).parse(context.config);
+    const teamProfile = teamProfileSchema.parse(await readJsonFile(parsedConfig.sampleData.teamProfile));
+    const teamMembers = requireMemberEmails(teamProfile.members);
+    const googleConfig = parsedConfig.googleWorkspace;
+    validateGoogleWorkspaceConfig(googleConfig);
+
+    if (googleConfig.dryRun) {
+      return this.createDryRunDraft(brief, slideOutline, teamMembers, parsedConfig);
+    }
+
+    const slotDurationMinutes = parsedConfig.scheduling.durationMinutes;
+    const token = await exchangeServiceAccountToken(googleConfig);
+    const attendeeEmails = teamMembers.map((member) => member.email);
+    const scheduledFor = resolveFixedScheduledFor(parsedConfig.scheduling);
+    const scheduledUntil = new Date(Date.parse(scheduledFor) + slotDurationMinutes * 60000).toISOString();
+    const roomLocation = parsedConfig.scheduling.location;
+
+    if (googleConfig.sendTopicAnnouncementEmail) {
+      await sendGmailMessage(token, googleConfig.gmailUserId, {
+        to: attendeeEmails,
+        subject: `Selected sharing topic: ${brief.title}`,
+        text: `The team selected "${brief.title}". The sharing session is planned for ${scheduledFor} at ${roomLocation}.`
+      });
+    }
+
+    const event = await createGoogleCalendarEvent(token, {
+      calendarId: googleConfig.calendarId,
+      organizerEmail: googleConfig.organizerEmail,
+      attendeeEmails,
+      roomResourceEmail: googleConfig.roomResourceCalendar,
+      title: brief.title,
+      description: brief.prepNotes,
+      start: scheduledFor,
+      end: scheduledUntil,
+      timeZone: googleConfig.timeZone,
+      createMeetLink: googleConfig.createMeetLink,
+      sendUpdates: googleConfig.sendCalendarUpdates
+    });
+
+    if (googleConfig.sendConfirmationEmail) {
+      await sendGmailMessage(token, googleConfig.gmailUserId, {
+        to: attendeeEmails,
+        subject: `Sharing schedule confirmed: ${brief.title}`,
+        text: `The sharing session for "${brief.title}" is booked at ${scheduledFor} in ${roomLocation}.${event.meetLink ? ` Meet link: ${event.meetLink}` : ""}`
+      });
+    }
+
+    const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
+    const notifications = buildNotifications(brief, scheduledFor, roomLocation, teamMembers, parsedConfig.scheduling);
+    const externalBooking: ExternalBooking = {
+      provider: "google-oauth-personal",
+      status: "booked",
+      organizerEmail: googleConfig.organizerEmail,
+      attendeeEmails,
+      roomResourceEmail: googleConfig.roomResourceCalendar,
+      calendarEventId: event.id,
+      calendarHtmlLink: event.htmlLink,
+      meetLink: event.meetLink,
+      candidateSlotStart: scheduledFor,
+      candidateSlotEnd: scheduledUntil,
+      notes: [
+        "Booked via Google Calendar API events.insert using the fixed team sharing schedule.",
+        googleConfig.roomResourceCalendar ? "Configured room resource calendar was attached to the event." : "No room resource calendar was configured; fixed location text was used."
+      ]
+    };
+
+    return sessionDraftSchema.parse({
+      sessionId,
+      topicId: brief.topicId,
+      title: brief.title,
+      scheduledFor,
+      durationMinutes: slotDurationMinutes,
+      location: roomLocation,
+      brief,
+      slideOutline,
+      notifications,
+      externalBooking
+    });
+  }
+
+  private async createDryRunDraft(
+    brief: SessionBrief,
+    slideOutline: SlideOutline,
+    teamMembers: Array<MemberProfile & { email: string }>,
+    parsedConfig: z.infer<typeof schedulingConfigSchema> & z.infer<typeof googleWorkspaceConfigSchema>
+  ): Promise<SessionDraft> {
+    const schedulingConfig = parsedConfig.scheduling;
+    const scheduledFor = resolveFixedScheduledFor(schedulingConfig);
+    const location = schedulingConfig.location;
+    const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
+    const notifications = buildNotifications(brief, scheduledFor, location, teamMembers, schedulingConfig);
+    const externalBooking: ExternalBooking = {
+      provider: "google-workspace",
+      status: "draft",
+      organizerEmail: parsedConfig.googleWorkspace.organizerEmail,
+      attendeeEmails: teamMembers.map((member) => member.email),
+      roomResourceEmail: parsedConfig.googleWorkspace.roomResourceCalendar,
+      candidateSlotStart: scheduledFor,
+      candidateSlotEnd: new Date(Date.parse(scheduledFor) + schedulingConfig.durationMinutes * 60000).toISOString(),
+      notes: [
+        "Dry run mode: no Google API requests were sent.",
+        "Use this mode to verify fixed schedule, attendee emails, location, and artifact shape before enabling real booking."
+      ]
+    };
+
+    return sessionDraftSchema.parse({
+      sessionId,
+      topicId: brief.topicId,
+      title: brief.title,
+      scheduledFor,
+      durationMinutes: schedulingConfig.durationMinutes,
+      location,
+      brief,
+      slideOutline,
+      notifications,
+      externalBooking
+    });
+  }
+}
+
+export class GoogleOAuthPersonalSchedulingProvider implements SchedulingProvider {
+  async createSessionDraft(input: { brief: SessionBrief; slideOutline: SlideOutline }, context: ModuleExecutionContext): Promise<SessionDraft> {
+    const brief = sessionBriefSchema.parse(input.brief);
+    const slideOutline = slideOutlineSchema.parse(input.slideOutline);
+    const parsedConfig = schedulingConfigSchema.merge(googlePersonalConfigSchema).parse(context.config);
+    const teamProfile = teamProfileSchema.parse(await readJsonFile(parsedConfig.sampleData.teamProfile));
+    const teamMembers = requireMemberEmails(teamProfile.members);
+    const personalConfig = parsedConfig.googlePersonal;
+
+    if (personalConfig.dryRun) {
+      return createPersonalDryRunDraft(brief, slideOutline, teamMembers, parsedConfig);
+    }
+
+    const accessToken = await loadPersonalAccessToken(personalConfig);
+    const scheduledFor = resolveFixedScheduledFor(parsedConfig.scheduling);
+    const scheduledUntil = new Date(Date.parse(scheduledFor) + parsedConfig.scheduling.durationMinutes * 60000).toISOString();
+    const attendeeEmails = teamMembers.map((member) => member.email);
+    const roomLocation = parsedConfig.scheduling.location;
+
+    if (personalConfig.sendTopicAnnouncementEmail) {
+      await sendGmailMessage(accessToken, personalConfig.gmailUserId, {
+        to: attendeeEmails,
+        subject: `Selected sharing topic: ${brief.title}`,
+        text: `The team selected "${brief.title}". The sharing session is planned for ${scheduledFor} at ${roomLocation}.`
+      });
+    }
+
+    const event = await createGoogleCalendarEvent(accessToken, {
+      calendarId: personalConfig.calendarId,
+      organizerEmail: personalConfig.organizerEmail,
+      attendeeEmails,
+      roomResourceEmail: personalConfig.roomResourceEmail,
+      title: brief.title,
+      description: brief.prepNotes,
+      start: scheduledFor,
+      end: scheduledUntil,
+      timeZone: "UTC",
+      createMeetLink: personalConfig.createMeetLink,
+      sendUpdates: personalConfig.sendCalendarUpdates
+    });
+
+    if (personalConfig.sendConfirmationEmail) {
+      await sendGmailMessage(accessToken, personalConfig.gmailUserId, {
+        to: attendeeEmails,
+        subject: `Sharing schedule confirmed: ${brief.title}`,
+        text: `The sharing session for "${brief.title}" is booked at ${scheduledFor} in ${roomLocation}.${event.meetLink ? ` Meet link: ${event.meetLink}` : ""}`
+      });
+    }
+
+    const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
+    const notifications = buildNotifications(brief, scheduledFor, roomLocation, teamMembers, parsedConfig.scheduling);
+    const externalBooking: ExternalBooking = {
+      provider: "google-workspace",
+      status: "booked",
+      organizerEmail: personalConfig.organizerEmail,
+      attendeeEmails,
+      roomResourceEmail: personalConfig.roomResourceEmail,
+      calendarEventId: event.id,
+      calendarHtmlLink: event.htmlLink,
+      meetLink: event.meetLink,
+      candidateSlotStart: scheduledFor,
+      candidateSlotEnd: scheduledUntil,
+      notes: [
+        "Booked via personal Google OAuth token using a fixed team sharing schedule.",
+        personalConfig.roomResourceEmail ? "Configured room resource email was attached to the event." : "No room resource email was configured; fixed location text was used."
+      ]
+    };
+
+    return sessionDraftSchema.parse({
+      sessionId,
+      topicId: brief.topicId,
+      title: brief.title,
+      scheduledFor,
+      durationMinutes: parsedConfig.scheduling.durationMinutes,
+      location: roomLocation,
+      brief,
+      slideOutline,
+      notifications,
+      externalBooking
     });
   }
 }
@@ -91,37 +348,397 @@ function buildScheduledFor(leadDays: number, startHourUtc: number): string {
   return base.toISOString();
 }
 
+function resolveFixedScheduledFor(schedulingConfig: z.infer<typeof schedulingConfigSchema>["scheduling"]): string {
+  return schedulingConfig.fixedStartAt ?? buildScheduledFor(schedulingConfig.leadDays, schedulingConfig.startHourUtc);
+}
+
+async function createPersonalDryRunDraft(
+  brief: SessionBrief,
+  slideOutline: SlideOutline,
+  teamMembers: Array<MemberProfile & { email: string }>,
+  parsedConfig: z.infer<typeof schedulingConfigSchema> & z.infer<typeof googlePersonalConfigSchema>
+): Promise<SessionDraft> {
+  const scheduledFor = resolveFixedScheduledFor(parsedConfig.scheduling);
+  const location = parsedConfig.scheduling.location;
+  const sessionId = `session-${brief.topicId}-${scheduledFor.slice(0, 10)}`;
+  const notifications = buildNotifications(brief, scheduledFor, location, teamMembers, parsedConfig.scheduling);
+  const externalBooking: ExternalBooking = {
+    provider: "google-oauth-personal",
+    status: "draft",
+    organizerEmail: parsedConfig.googlePersonal.organizerEmail,
+    attendeeEmails: teamMembers.map((member) => member.email),
+    roomResourceEmail: parsedConfig.googlePersonal.roomResourceEmail,
+    candidateSlotStart: scheduledFor,
+    candidateSlotEnd: new Date(Date.parse(scheduledFor) + parsedConfig.scheduling.durationMinutes * 60000).toISOString(),
+    notes: [
+      "Dry run mode: no Google API requests were sent.",
+      "Use this mode to verify fixed schedule, attendee emails, location, and artifact shape before enabling personal Gmail booking."
+    ]
+  };
+
+  return sessionDraftSchema.parse({
+    sessionId,
+    topicId: brief.topicId,
+    title: brief.title,
+    scheduledFor,
+    durationMinutes: parsedConfig.scheduling.durationMinutes,
+    location,
+    brief,
+    slideOutline,
+    notifications,
+    externalBooking
+  });
+}
+
 function buildNotifications(
   brief: SessionBrief,
   scheduledFor: string,
+  location: string,
+  teamMembers: MemberProfile[],
   schedulingConfig: z.infer<typeof schedulingConfigSchema>["scheduling"]
 ) {
+  const teamEmails = teamMembers
+    .map((member) => member.email)
+    .filter((email): email is string => Boolean(email));
+  const topicEmailRecipients = schedulingConfig.emailRecipients.length > 0
+    ? schedulingConfig.emailRecipients
+    : teamEmails;
   const defaultCalendarRecipients = schedulingConfig.calendarRecipients.length > 0
     ? schedulingConfig.calendarRecipients
-    : brief.audience;
-  const notifications: NotificationDraft[] = [
+    : teamEmails;
+  const notifications = [
     {
-      channel: "slack",
+      channel: "email" as const,
+      subject: `Selected sharing topic: ${brief.title}`,
+      body: `The team selected "${brief.title}" for the next sharing session. The workflow checked team availability and prepared a draft session at ${scheduledFor} in ${location}.`,
+      recipients: topicEmailRecipients
+    },
+    {
+      channel: "slack" as const,
       subject: `Upcoming sharing: ${brief.title}`,
-      body: `Draft Slack notify: "${brief.title}" is planned for ${scheduledFor}. Review the brief, agenda, and examples before the session.`,
+      body: `Draft Slack notify: "${brief.title}" is planned for ${scheduledFor} in ${location}. The slot was chosen from the current team availability draft.`,
       recipients: [schedulingConfig.slackChannel]
     },
     {
-      channel: "calendar",
+      channel: "calendar" as const,
       subject: `Team Sharing: ${brief.title}`,
-      body: `Draft calendar event for "${brief.title}" scheduled at ${scheduledFor}.`,
+      body: `Draft calendar event for "${brief.title}" scheduled at ${scheduledFor} in ${location}.`,
       recipients: defaultCalendarRecipients
+    },
+    {
+      channel: "email" as const,
+      subject: `Sharing schedule confirmed: ${brief.title}`,
+      body: `Draft email: the team sharing for "${brief.title}" is planned at ${scheduledFor} in ${location}. Please review the brief and slide outline before the session.`,
+      recipients: topicEmailRecipients
     }
-  ];
-
-  if (schedulingConfig.emailRecipients.length > 0) {
-    notifications.push({
-      channel: "email",
-      subject: `Sharing session draft: ${brief.title}`,
-      body: `Draft email: please review the planned sharing session for "${brief.title}" scheduled at ${scheduledFor}.`,
-      recipients: schedulingConfig.emailRecipients
-    });
-  }
+  ].filter((notification): notification is NotificationDraft => notification.recipients.length > 0);
 
   return notifications.map((notification) => notificationDraftSchema.parse(notification));
+}
+
+function requireMemberEmails(teamMembers: MemberProfile[]): Array<MemberProfile & { email: string }> {
+  const missing = teamMembers.filter((member) => !member.email).map((member) => member.name);
+  if (missing.length > 0) {
+    throw new Error(`Google Workspace scheduling requires member emails. Missing email for: ${missing.join(", ")}`);
+  }
+
+  return teamMembers as Array<MemberProfile & { email: string }>;
+}
+
+function validateGoogleWorkspaceConfig(config: z.infer<typeof googleWorkspaceConfigSchema>["googleWorkspace"]): void {
+  const placeholderFields = [
+    config.organizerEmail,
+    config.delegatedUser,
+    config.serviceAccountEmail,
+    ...(config.roomResourceCalendar ? [config.roomResourceCalendar] : [])
+  ];
+
+  if (placeholderFields.some((value) => value.includes("your-domain.com") || value.includes("REPLACE_WITH"))) {
+    throw new Error(
+      "Google Workspace config still contains placeholder values. Update organizerEmail, delegatedUser, serviceAccountEmail, and roomResourceCalendars before running live mode."
+    );
+  }
+
+  if (!config.serviceAccountEmail.endsWith(".gserviceaccount.com")) {
+    throw new Error(
+      `googleWorkspace.serviceAccountEmail must be a Google Cloud service account address ending with ".gserviceaccount.com". Received: ${config.serviceAccountEmail}`
+    );
+  }
+}
+
+async function exchangeServiceAccountToken(config: z.infer<typeof googleWorkspaceConfigSchema>["googleWorkspace"]): Promise<string> {
+  const privateKey = process.env[config.privateKeyEnv]?.replace(/\\n/g, "\n");
+  if (!privateKey) {
+    throw new Error(`Missing Google service account private key in env var "${config.privateKeyEnv}".`);
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const claims = {
+    iss: config.serviceAccountEmail,
+    sub: config.delegatedUser,
+    scope: [
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/gmail.send"
+    ].join(" "),
+    aud: "https://oauth2.googleapis.com/token",
+    iat: nowSeconds,
+    exp: nowSeconds + 3600
+  };
+  const assertion = signJwt(
+    { alg: "RS256", typ: "JWT" },
+    claims,
+    privateKey
+  );
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    })
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    if (response.status === 400 && bodyText.includes("invalid_grant") && bodyText.includes("account not found")) {
+      throw new Error(
+        [
+          "Failed to exchange Google service account token: invalid_grant / account not found.",
+          `Check googleWorkspace.delegatedUser="${config.delegatedUser}" is a real Google Workspace user in your domain.`,
+          `Check googleWorkspace.serviceAccountEmail="${config.serviceAccountEmail}" is the actual service account email from Google Cloud, not a normal user email.`,
+          "If you are using a personal Gmail account instead of a Google Workspace domain user, domain-wide delegation will not work."
+        ].join(" ")
+      );
+    }
+
+    throw new Error(`Failed to exchange Google service account token: ${response.status} ${bodyText}`);
+  }
+
+  const payload = await response.json() as { access_token?: string };
+  if (!payload.access_token) {
+    throw new Error("Google OAuth token response did not include access_token.");
+  }
+
+  return payload.access_token;
+}
+
+async function loadPersonalAccessToken(config: z.infer<typeof googlePersonalConfigSchema>["googlePersonal"]): Promise<string> {
+  const credentials = personalOAuthCredentialsSchema.parse(await readJsonFile(config.credentialsFile));
+  let rawTokenPayload: unknown;
+
+  try {
+    rawTokenPayload = await readJsonFile(config.tokenFile);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        `Failed to load Google personal OAuth token file "${config.tokenFile}".`,
+        message,
+        `Run "npm run google:personal-auth -- configs/google-oauth-personal-post-voting-live.json" to generate a fresh token file.`
+      ].join(" ")
+    );
+  }
+
+  const tokenPayload = personalOAuthTokenSchema.parse(rawTokenPayload);
+  const client = credentials.installed ?? credentials.web;
+
+  if (!client) {
+    throw new Error("Google personal OAuth credentials must include an installed or web client definition.");
+  }
+
+  if (!tokenPayload.refresh_token) {
+    throw new Error(
+      `Google personal OAuth token file "${config.tokenFile}" does not include a refresh_token. Run the personal OAuth auth script again and grant offline access.`
+    );
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: client.client_id,
+      client_secret: client.client_secret,
+      refresh_token: tokenPayload.refresh_token,
+      grant_type: "refresh_token"
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to refresh Google personal OAuth token: ${response.status} ${await response.text()}`);
+  }
+
+  const refreshed = await response.json() as {
+    access_token?: string;
+    expires_in?: number;
+    scope?: string;
+    token_type?: string;
+  };
+
+  if (!refreshed.access_token || !refreshed.expires_in) {
+    throw new Error("Google personal OAuth refresh response did not include access_token and expires_in.");
+  }
+
+  await writeJsonFile(config.tokenFile, {
+    ...tokenPayload,
+    access_token: refreshed.access_token,
+    scope: refreshed.scope ?? tokenPayload.scope,
+    token_type: refreshed.token_type ?? tokenPayload.token_type,
+    expiry_date: Date.now() + refreshed.expires_in * 1000
+  });
+
+  return refreshed.access_token;
+}
+
+const personalOAuthClientSchema = z.object({
+  client_id: z.string().min(1),
+  client_secret: z.string().min(1),
+  redirect_uris: z.array(z.string().min(1)).min(1)
+});
+
+const personalOAuthCredentialsSchema = z.object({
+  installed: personalOAuthClientSchema.optional(),
+  web: personalOAuthClientSchema.optional()
+});
+
+const personalOAuthTokenSchema = z.object({
+  access_token: z.string().min(1).optional(),
+  refresh_token: z.string().min(1),
+  scope: z.string().min(1).optional(),
+  token_type: z.string().min(1).optional(),
+  expiry_date: z.number().optional()
+});
+
+function signJwt(header: Record<string, unknown>, claims: Record<string, unknown>, privateKey: string): string {
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedClaims = base64UrlEncode(JSON.stringify(claims));
+  const unsignedToken = `${encodedHeader}.${encodedClaims}`;
+  const signer = createSign("RSA-SHA256");
+  signer.update(unsignedToken);
+  signer.end();
+  const signature = signer.sign(privateKey);
+  return `${unsignedToken}.${base64UrlEncode(signature)}`;
+}
+
+function base64UrlEncode(value: string | Buffer): string {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function createGoogleCalendarEvent(
+  token: string,
+  input: {
+    calendarId: string;
+    organizerEmail: string;
+    attendeeEmails: string[];
+    roomResourceEmail?: string;
+    title: string;
+    description: string;
+    start: string;
+    end: string;
+    timeZone: string;
+    createMeetLink: boolean;
+    sendUpdates: "all" | "externalOnly" | "none";
+  }
+): Promise<{ id?: string; htmlLink?: string; meetLink?: string }> {
+  const attendees = input.attendeeEmails.map((email) => ({ email }));
+  if (input.roomResourceEmail) {
+    attendees.push({ email: input.roomResourceEmail });
+  }
+
+  const body: Record<string, unknown> = {
+    summary: input.title,
+    description: input.description,
+    start: {
+      dateTime: input.start,
+      timeZone: input.timeZone
+    },
+    end: {
+      dateTime: input.end,
+      timeZone: input.timeZone
+    },
+    attendees
+  };
+
+  if (input.createMeetLink) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: randomUUID(),
+        conferenceSolutionKey: {
+          type: "hangoutsMeet"
+        }
+      }
+    };
+  }
+
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`);
+  url.searchParams.set("sendUpdates", input.sendUpdates);
+  if (input.createMeetLink) {
+    url.searchParams.set("conferenceDataVersion", "1");
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google Calendar events.insert failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json() as {
+    id?: string;
+    htmlLink?: string;
+    conferenceData?: {
+      entryPoints?: Array<{ uri?: string; entryPointType?: string }>;
+    };
+  };
+  const meetLink = payload.conferenceData?.entryPoints?.find((entryPoint) => entryPoint.entryPointType === "video")?.uri;
+
+  return {
+    id: payload.id,
+    htmlLink: payload.htmlLink,
+    meetLink
+  };
+}
+
+async function sendGmailMessage(
+  token: string,
+  userId: string,
+  message: {
+    to: string[];
+    subject: string;
+    text: string;
+  }
+): Promise<void> {
+  const mime = [
+    `To: ${message.to.join(", ")}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "MIME-Version: 1.0",
+    `Subject: ${message.subject}`,
+    "",
+    message.text
+  ].join("\r\n");
+
+  const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}/messages/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      raw: base64UrlEncode(mime)
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gmail users.messages.send failed: ${response.status} ${await response.text()}`);
+  }
 }

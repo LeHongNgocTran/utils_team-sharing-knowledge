@@ -5,14 +5,27 @@ import { MockSlideProvider } from "@tsa/slide-module";
 import { MockTopicGenerationProvider } from "@tsa/topic-generation-module";
 import { MockTopicRankingProvider } from "@tsa/topic-ranking-module";
 import { RealContentProvider } from "@tsa/content-module";
-import { RealSchedulingProvider } from "@tsa/scheduling-module";
+import { GoogleOAuthPersonalSchedulingProvider } from "@tsa/scheduling-module";
 import { RealVotingProvider } from "@tsa/voting-module";
 import { sessionDraftSchema } from "@tsa/schemas";
 import { createTestContext } from "../test-context.js";
 
-describe("real scheduling provider", () => {
-  it("creates a schema-valid session draft with notification drafts", async () => {
+describe("google oauth personal scheduling provider", () => {
+  it("creates a schema-valid dry-run booking draft", async () => {
     const context = createTestContext({
+      providerSelections: {
+        profile: "mock",
+        gapAnalysis: "mock",
+        topicGeneration: "mock",
+        topicRanking: "mock",
+        voting: "real",
+        content: "real",
+        slide: "mock",
+        scheduling: "google-oauth-personal",
+        feedback: "mock",
+        evaluation: "mock",
+        memory: "mock"
+      },
       config: {
         sampleData: {
           teamProfile: "data/samples/team-profile.json",
@@ -34,8 +47,19 @@ describe("real scheduling provider", () => {
           fixedStartAt: "2026-05-15T08:00:00.000Z",
           durationMinutes: 75,
           location: "Training Room 2 - Floor 5",
-          slackChannel: "#platform-team",
-          calendarRecipients: ["engineering@example.com"]
+          slackChannel: "#platform-team"
+        },
+        googlePersonal: {
+          credentialsFile: "configs/google-oauth-client.json",
+          tokenFile: "data/auth/google-personal-token.json",
+          organizerEmail: "host.personal@gmail.com",
+          calendarId: "primary",
+          createMeetLink: true,
+          sendCalendarUpdates: "all",
+          sendTopicAnnouncementEmail: true,
+          sendConfirmationEmail: true,
+          dryRun: true,
+          gmailUserId: "me"
         }
       }
     });
@@ -47,12 +71,12 @@ describe("real scheduling provider", () => {
     const selection = await new RealVotingProvider().selectTopic(rankedTopics, context);
     const brief = await new RealContentProvider().createBrief(selection, context);
     const slideOutline = await new MockSlideProvider().createOutline(brief, context);
-    const sessionDraft = await new RealSchedulingProvider().createSessionDraft({ brief, slideOutline }, context);
+    const sessionDraft = await new GoogleOAuthPersonalSchedulingProvider().createSessionDraft({ brief, slideOutline }, context);
 
     expect(sessionDraftSchema.safeParse(sessionDraft).success).toBe(true);
+    expect(sessionDraft.externalBooking?.provider).toBe("google-oauth-personal");
+    expect(sessionDraft.externalBooking?.status).toBe("draft");
+    expect(sessionDraft.externalBooking?.attendeeEmails).toHaveLength(2);
     expect(sessionDraft.scheduledFor).toBe("2026-05-15T08:00:00.000Z");
-    expect(sessionDraft.durationMinutes).toBe(75);
-    expect(sessionDraft.location).toBe("Training Room 2 - Floor 5");
-    expect(sessionDraft.notifications.map((item) => item.channel)).toEqual(["email", "slack", "calendar", "email"]);
   });
 });

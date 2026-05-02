@@ -8,6 +8,6 @@ Output: `FeedbackSummary`
 
 Providers:
 - `MockFeedbackProvider`: reads `data/samples/feedback.json` and calculates averages.
-- `RealFeedbackProvider`: placeholder for Forms, Slack survey, or feedback API.
+- `RealFeedbackProvider`: rule-based feedback reader that loads structured responses, preserves raw entries, and generates a human-readable summary.
 
 Integration rule: keep raw feedback entries and derived summary separate so evaluation can be audited.

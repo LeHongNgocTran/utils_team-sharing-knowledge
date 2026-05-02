@@ -1,0 +1,67 @@
+{
+  "runMode": "real",
+  "outputDir": "data/outputs",
+  "sampleData": {
+    "teamProfile": "data/samples/team-profile.json",
+    "teamAvailability": "data/samples/team-availability.json",
+    "roomInventory": "data/samples/room-inventory.json",
+    "votes": "data/samples/votes.json",
+    "feedback": "data/samples/feedback.json"
+  },
+  "providers": {
+    "profile": "mock",
+    "gapAnalysis": "mock",
+    "topicGeneration": "mock",
+    "topicRanking": "mock",
+    "voting": "real",
+    "content": "real",
+    "slide": "mock",
+    "scheduling": "google-workspace",
+    "feedback": "real",
+    "evaluation": "real",
+    "memory": "mock"
+  },
+  "voting": {
+    "sourceType": "google-forms-csv",
+    "filePath": "data/samples/google-forms-votes.csv"
+  },
+  "content": {
+    "defaultDurationMinutes": 55,
+    "agendaStyle": "discussion-heavy",
+    "callToAction": "Choose one practice to try in the next sprint."
+  },
+  "scheduling": {
+    "fixedStartAt": "2026-05-15T08:00:00.000Z",
+    "durationMinutes": 75,
+    "location": "Training Room 2 - Floor 5",
+    "slackChannel": "#platform-team",
+    "calendarRecipients": [
+      "engineering@example.com"
+    ]
+  },
+  "feedback": {
+    "filePath": "data/samples/feedback.json"
+  },
+  "googleWorkspace": {
+    "organizerEmail": "team-sharing-organizer@your-domain.com",
+    "delegatedUser": "team-sharing-organizer@your-domain.com",
+    "serviceAccountEmail": "tsa-bot@your-project-id.iam.gserviceaccount.com",
+    "privateKeyEnv": "GOOGLE_PRIVATE_KEY",
+    "calendarId": "primary",
+    "timeZone": "Asia/Ho_Chi_Minh",
+    "createMeetLink": true,
+    "sendCalendarUpdates": "all",
+    "sendTopicAnnouncementEmail": true,
+    "sendConfirmationEmail": true,
+    "dryRun": false,
+    "roomResourceCalendar": "training-room-2@resource.your-domain.com",
+    "gmailUserId": "me"
+  },
+  "reviewCheckpoints": {
+    "topicRanking": false,
+    "topicSelection": false,
+    "contentGeneration": false,
+    "schedulingDraft": false,
+    "evaluationResult": false
+  }
+}
